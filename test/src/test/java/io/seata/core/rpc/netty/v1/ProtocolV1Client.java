@@ -30,7 +30,7 @@ import io.netty.util.concurrent.DefaultEventExecutor;
 import io.netty.util.concurrent.DefaultPromise;
 import io.seata.common.thread.NamedThreadFactory;
 import io.seata.common.thread.PositiveAtomicCounter;
-import io.seata.core.codec.CodecType;
+import io.seata.core.serializer.SerializerType;
 import io.seata.core.model.BranchType;
 import io.seata.core.protocol.ProtocolConstants;
 import io.seata.core.protocol.RpcMessage;
@@ -118,11 +118,11 @@ public class ProtocolV1Client {
 
         RpcMessage rpcMessage = new RpcMessage();
         rpcMessage.setId(msgId);
-        rpcMessage.setCodec(CodecType.SEATA.getCode());
+        rpcMessage.setCodec(SerializerType.SEATA.getCode());
         rpcMessage.setCompressor(ProtocolConstants.CONFIGURED_COMPRESSOR);
         rpcMessage.setHeadMap(head);
         rpcMessage.setBody(body);
-        rpcMessage.setMessageType(ProtocolConstants.MSGTYPE_RESQUEST);
+        rpcMessage.setMessageType(ProtocolConstants.MSGTYPE_RESQUEST_SYNC);
 
         if (channel != null) {
             DefaultPromise promise = new DefaultPromise(defaultEventExecutor);
@@ -153,8 +153,9 @@ public class ProtocolV1Client {
 
         final int threads = 50;
         final AtomicLong cnt = new AtomicLong(0);
+        // no queue
         final ThreadPoolExecutor service1 = new ThreadPoolExecutor(threads, threads, 0L, TimeUnit.MILLISECONDS,
-                new SynchronousQueue<Runnable>(), new NamedThreadFactory("client-", false));// 无队列
+                new SynchronousQueue<Runnable>(), new NamedThreadFactory("client-", false));
         for (int i = 0; i < threads; i++) {
             service1.execute(() -> {
                 while (true) {

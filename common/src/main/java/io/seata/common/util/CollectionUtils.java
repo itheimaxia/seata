@@ -17,10 +17,10 @@ package io.seata.common.util;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * The type Collection utils.
@@ -30,13 +30,16 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CollectionUtils {
 
+    private CollectionUtils() {
+    }
+
     /**
      * Is empty boolean.
      *
      * @param col the col
      * @return the boolean
      */
-    public static boolean isEmpty(Collection col) {
+    public static boolean isEmpty(Collection<?> col) {
         return !isNotEmpty(col);
     }
 
@@ -46,8 +49,8 @@ public class CollectionUtils {
      * @param col the col
      * @return the boolean
      */
-    public static boolean isNotEmpty(Collection col) {
-        return col != null && col.size() > 0;
+    public static boolean isNotEmpty(Collection<?> col) {
+        return col != null && !col.isEmpty();
     }
 
     /**
@@ -71,20 +74,38 @@ public class CollectionUtils {
     }
 
     /**
-     * To string string.
+     * Is empty boolean.
+     *
+     * @param map the map
+     * @return the boolean
+     */
+    public static boolean isEmpty(Map<?, ?> map) {
+        return !isNotEmpty(map);
+    }
+
+    /**
+     * Is not empty boolean.
+     *
+     * @param map the map
+     * @return the boolean
+     */
+    public static boolean isNotEmpty(Map<?, ?> map) {
+        return map != null && !map.isEmpty();
+    }
+
+    /**
+     * To string.
      *
      * @param col the col
      * @return the string
      */
-    public static String toString(Collection col) {
+    public static String toString(Collection<?> col) {
         if (isEmpty(col)) {
             return "";
         }
-        StringBuffer sb = new StringBuffer();
+        StringBuilder sb = new StringBuilder();
         sb.append("[");
-        Iterator it = col.iterator();
-        while (it.hasNext()) {
-            Object obj = it.next();
+        for (Object obj : col) {
             sb.append(StringUtils.toString(obj));
             sb.append(",");
         }
@@ -94,13 +115,31 @@ public class CollectionUtils {
     }
 
     /**
+     * To string map
+     *
+     * @param param map
+     * @return the string map
+     */
+    public static Map<String, String> toStringMap(Map<String, Object> param) {
+        Map<String, String> covertMap = new HashMap<>();
+        if (CollectionUtils.isNotEmpty(param)) {
+            param.forEach((key, value) -> {
+                if (value != null) {
+                    covertMap.put(key, StringUtils.toString(value));
+                }
+            });
+        }
+        return covertMap;
+    }
+
+    /**
      * Is size equals boolean.
      *
      * @param col0 the col 0
      * @param col1 the col 1
      * @return the boolean
      */
-    public static boolean isSizeEquals(Collection col0, Collection col1) {
+    public static boolean isSizeEquals(Collection<?> col0, Collection<?> col1) {
         if (col0 == null) {
             return col1 == null;
         } else {
@@ -146,7 +185,7 @@ public class CollectionUtils {
         if (data == null) {
             return null;
         }
-        Map<String, String> map = new ConcurrentHashMap<>();
+        Map<String, String> map = new HashMap<>();
         if (StringUtils.isBlank(data)) {
             return map;
         }
@@ -168,21 +207,74 @@ public class CollectionUtils {
     }
 
     /**
+     * Compute if absent.
+     * Use this method if you are frequently using the same key,
+     * because the get method has no lock.
+     *
+     * @param map             the map
+     * @param key             the key
+     * @param mappingFunction the mapping function
+     * @param <K>             the type of key
+     * @param <V>             the type of value
+     * @return the value
+     */
+    public static <K, V> V computeIfAbsent(Map<K, V> map, K key, Function<? super K, ? extends V> mappingFunction) {
+        V value = map.get(key);
+        if (value != null) {
+            return value;
+        }
+        return map.computeIfAbsent(key, mappingFunction);
+    }
+
+    /**
      * To upper list list.
      *
      * @param sourceList the source list
      * @return the list
      */
     public static List<String> toUpperList(List<String> sourceList) {
-        if (null == sourceList || sourceList.size() == 0) { return sourceList; }
+        if (isEmpty(sourceList)) {
+            return sourceList;
+        }
         List<String> destList = new ArrayList<>(sourceList.size());
         for (String element : sourceList) {
-            if (null != element) {
+            if (element != null) {
                 destList.add(element.toUpperCase());
             } else {
-                destList.add(element);
+                destList.add(null);
             }
         }
         return destList;
+    }
+
+    /**
+     * Get the last item.
+     * <p>
+     * 'IndexOutOfBoundsException' may be thrown, because the `list.size()` and `list.get(size - 1)` are not atomic.
+     * This method can avoid the 'IndexOutOfBoundsException' cause by concurrency.
+     * </p>
+     *
+     * @param list the list
+     * @param <T>  the type of item
+     * @return the last item
+     */
+    public static <T> T getLast(List<T> list) {
+        if (isEmpty(list)) {
+            return null;
+        }
+
+        int size;
+        while (true) {
+            size = list.size();
+            if (size == 0) {
+                return null;
+            }
+
+            try {
+                return list.get(size - 1);
+            } catch (IndexOutOfBoundsException ex) {
+                // catch the exception and continue to retry
+            }
+        }
     }
 }

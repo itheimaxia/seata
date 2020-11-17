@@ -17,6 +17,7 @@ package io.seata.rm.datasource.sql.struct;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -24,6 +25,7 @@ import java.util.Objects;
 
 import io.seata.common.exception.NotSupportYetException;
 import io.seata.common.util.CollectionUtils;
+import io.seata.rm.datasource.ColumnUtils;
 
 /**
  * The type Table meta.
@@ -33,8 +35,15 @@ import io.seata.common.util.CollectionUtils;
 public class TableMeta {
     private String tableName;
 
-    private Map<String, ColumnMeta> allColumns = new HashMap<String, ColumnMeta>();
-    private Map<String, IndexMeta> allIndexes = new HashMap<String, IndexMeta>();
+    /**
+     * key: column name
+     */
+
+    private Map<String, ColumnMeta> allColumns = new LinkedHashMap<>();
+    /**
+     * key: index name
+     */
+    private Map<String, IndexMeta> allIndexes = new LinkedHashMap<>();
 
     /**
      * Gets table name.
@@ -61,15 +70,7 @@ public class TableMeta {
      * @return the column meta
      */
     public ColumnMeta getColumnMeta(String colName) {
-        ColumnMeta col = allColumns.get(colName);
-        if (col == null) {
-            if (colName.charAt(0) == '`') {
-                col = allColumns.get(colName.substring(1, colName.length() - 1));
-            } else {
-                col = allColumns.get("`" + colName + "`");
-            }
-        }
-        return col;
+        return allColumns.get(colName);
     }
 
     /**
@@ -112,18 +113,17 @@ public class TableMeta {
      * @return the primary key map
      */
     public Map<String, ColumnMeta> getPrimaryKeyMap() {
-        Map<String, ColumnMeta> pk = new HashMap<String, ColumnMeta>();
-        for (Entry<String, IndexMeta> entry : allIndexes.entrySet()) {
-            IndexMeta index = entry.getValue();
+        Map<String, ColumnMeta> pk = new HashMap<>();
+        allIndexes.forEach((key, index) -> {
             if (index.getIndextype().value() == IndexType.PRIMARY.value()) {
                 for (ColumnMeta col : index.getValues()) {
                     pk.put(col.getColumnName(), col);
                 }
             }
-        }
+        });
 
-        if (pk.size() > 1) {
-            throw new NotSupportYetException("Multi PK");
+        if (pk.size() < 1) {
+            throw new NotSupportYetException(String.format("%s needs to contain the primary key.", tableName));
         }
 
         return pk;
@@ -144,12 +144,12 @@ public class TableMeta {
     }
 
     /**
-     * Gets pk name.
-     *
-     * @return the pk name
+     * Gets add escape pk name.
+     * @param dbType
+     * @return
      */
-    public String getPkName() {
-        return getPrimaryKeyOnlyName().get(0);
+    public List<String> getEscapePkNameList(String dbType) {
+        return ColumnUtils.addEscape(getPrimaryKeyOnlyName(), dbType);
     }
 
     /**
@@ -168,86 +168,13 @@ public class TableMeta {
             return false;
         }
 
+
+        //at least contain one pk
         if (cols.containsAll(pk)) {
             return true;
         } else {
             return CollectionUtils.toUpperList(cols).containsAll(CollectionUtils.toUpperList(pk));
         }
-    }
-
-    /**
-     * Gets create table sql.
-     *
-     * @return the create table sql
-     */
-    public String getCreateTableSQL() {
-        StringBuilder sb = new StringBuilder("CREATE TABLE");
-        sb.append(String.format(" `%s` ", getTableName()));
-        sb.append("(");
-
-        boolean flag = true;
-        Map<String, ColumnMeta> allColumns = getAllColumns();
-        for (Entry<String, ColumnMeta> entry : allColumns.entrySet()) {
-            if (flag) {
-                flag = false;
-            } else {
-                sb.append(",");
-            }
-
-            ColumnMeta col = entry.getValue();
-            sb.append(String.format(" `%s` ", col.getColumnName()));
-            sb.append(col.getDataTypeName());
-            if (col.getColumnSize() > 0) {
-                sb.append(String.format("(%d)", col.getColumnSize()));
-            }
-
-            if (col.getColumnDef() != null && col.getColumnDef().length() > 0) {
-                sb.append(String.format(" default '%s'", col.getColumnDef()));
-            }
-
-            if (col.getIsNullAble() != null && col.getIsNullAble().length() > 0) {
-                sb.append(" ");
-                sb.append(col.getIsNullAble());
-            }
-        }
-
-        Map<String, IndexMeta> allIndexes = getAllIndexes();
-        for (Entry<String, IndexMeta> entry : allIndexes.entrySet()) {
-            sb.append(", ");
-
-            IndexMeta index = entry.getValue();
-            switch (index.getIndextype()) {
-                case FullText:
-                    break;
-                case Normal:
-                    sb.append(String.format("KEY `%s`", index.getIndexName()));
-                    break;
-                case PRIMARY:
-                    sb.append("PRIMARY KEY");
-                    break;
-                case Unique:
-                    sb.append(String.format("UNIQUE KEY `%s`", index.getIndexName()));
-                    break;
-                default:
-                    break;
-            }
-
-            sb.append(" (");
-            boolean f = true;
-            for (ColumnMeta c : index.getValues()) {
-                if (f) {
-                    f = false;
-                } else {
-                    sb.append(",");
-                }
-
-                sb.append(String.format("`%s`", c.getColumnName()));
-            }
-            sb.append(")");
-        }
-        sb.append(")");
-
-        return sb.toString();
     }
 
     @Override
